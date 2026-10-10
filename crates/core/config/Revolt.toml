@@ -45,6 +45,12 @@ events = "internal.event"
 # See https://github.com/stoatchat/self-hosted#making-your-instance-invite-only
 invite_only = false
 
+[api.oidc]
+# Optional OpenID Connect login. Keep the client secret in REVOLT__API__OIDC__CLIENT_SECRET.
+issuer = ""
+client_id = ""
+client_secret = ""
+
 [api.smtp]
 # Email server configuration for verification
 # Defaults to no email verification (host field is empty)

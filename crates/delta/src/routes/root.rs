@@ -49,6 +49,8 @@ pub struct RevoltFeatures {
     pub email: bool,
     /// Whether this server is invite only
     pub invite_only: bool,
+    /// Whether OpenID Connect login is enabled
+    pub oidc: bool,
     /// File server service configuration
     pub autumn: Feature,
     /// Proxy service configuration
@@ -192,6 +194,9 @@ pub async fn root() -> Result<Json<RevoltConfig>> {
             },
             email: !config.api.smtp.host.is_empty(),
             invite_only: config.api.registration.invite_only,
+            oidc: !config.api.oidc.issuer.is_empty()
+                && !config.api.oidc.client_id.is_empty()
+                && !config.api.oidc.client_secret.is_empty(),
             autumn: Feature {
                 enabled: !config.hosts.autumn.is_empty(),
                 url: config.hosts.autumn.clone(),

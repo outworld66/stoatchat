@@ -262,6 +262,16 @@ pub struct ApiUsers {
     pub min_username_length: usize,
 }
 
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct ApiOidc {
+    #[serde(default)]
+    pub issuer: String,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApiAuditLogs {
     /// How long audit log entries last before being removed, in seconds
@@ -271,6 +281,8 @@ pub struct ApiAuditLogs {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Api {
     pub registration: ApiRegistration,
+    #[serde(default)]
+    pub oidc: ApiOidc,
     pub smtp: ApiSmtp,
     pub security: ApiSecurity,
     pub workers: ApiWorkers,
