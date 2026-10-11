@@ -1,0 +1,14 @@
+FROM rust:1.92.0-slim-trixie AS builder
+WORKDIR /home/rust/src
+ENV CARGO_BUILD_JOBS=2
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev libdav1d-dev && rm -rf /var/lib/apt/lists/*
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo build --release -p revolt-delta --bin revolt-delta
+
+FROM debian:13-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3t64 libdav1d7 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /home/rust/src/target/release/revolt-delta /usr/local/bin/revolt-delta
+ENV ROCKET_ADDRESS=0.0.0.0
+EXPOSE 14702
+ENTRYPOINT ["/usr/local/bin/revolt-delta"]
