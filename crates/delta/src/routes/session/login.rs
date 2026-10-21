@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use iso8601_timestamp::Timestamp;
+use revolt_config::config;
 use revolt_database::{
     util::{email::normalise_email, password::assert_safe},
     Database, EmailVerification, MFATicket,
@@ -34,6 +35,16 @@ pub async fn login(
             password,
             friendly_name,
         } => {
+            let settings = config().await;
+            if !settings.api.oidc.issuer.is_empty()
+                && !settings.api.oidc.client_id.is_empty()
+                && !settings.api.oidc.client_secret.is_empty()
+            {
+                return Err(create_error!(FeatureDisabled {
+                    feature: "password authentication".into()
+                }));
+            }
+
             // Try to find the account we want
             let email_normalised = normalise_email(email);
 

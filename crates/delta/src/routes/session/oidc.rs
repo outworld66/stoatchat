@@ -7,7 +7,7 @@ use openidconnect::{
 };
 use redis_kiss::{AsyncCommands, get_connection};
 use revolt_config::{Settings, config};
-use revolt_database::{Database, EmailVerification, MFATicket, util::email::normalise_email};
+use revolt_database::{Account, Database, EmailVerification, MFATicket, util::email::normalise_email};
 use revolt_models::v0;
 use revolt_result::{Result, create_error};
 use rocket::{State, response::Redirect, serde::json::Json};
@@ -149,11 +149,16 @@ pub async fn callback(
         .email()
         .ok_or_else(|| create_error!(InvalidCredentials))?;
     let email = normalise_email(email.as_str().to_owned());
-    let account = db
-        .fetch_account_by_normalised_email(&email)
-        .await?
-        .filter(|account| matches!(account.verification, EmailVerification::Verified))
-        .ok_or_else(|| create_error!(InvalidCredentials))?;
+    let account = match db.fetch_account_by_normalised_email(&email).await? {
+        Some(mut account) if matches!(account.verification, EmailVerification::Pending { .. }) => {
+            account.verification = EmailVerification::Verified;
+            account.save(db).await?;
+            account
+        }
+        Some(account) if matches!(account.verification, EmailVerification::Verified) => account,
+        Some(_) => return Ok(fail()),
+        None => Account::new(db, email, nanoid::nanoid!(), false).await?,
+    };
     let response = if account.disabled {
         v0::ResponseLogin::Disabled {
             user_id: account.id,

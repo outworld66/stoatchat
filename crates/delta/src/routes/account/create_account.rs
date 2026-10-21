@@ -31,6 +31,16 @@ pub async fn create_account(
 ) -> Result<EmptyResponse> {
     let data = data.into_inner();
 
+    let settings = config().await;
+    if !settings.api.oidc.issuer.is_empty()
+        && !settings.api.oidc.client_id.is_empty()
+        && !settings.api.oidc.client_secret.is_empty()
+    {
+        return Err(create_error!(FeatureDisabled {
+            feature: "password registration".into()
+        }));
+    }
+
     // Random jitter from 0-1000ms
     sleep(Duration::from_millis((rand::random::<f32>() * 1000.) as u64)).await;
 
