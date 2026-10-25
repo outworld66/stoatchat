@@ -1,11 +1,11 @@
 //! Create a new MFA ticket or validate an existing one.
 //! PUT /mfa/ticket
-use revolt_result::{Result, create_error};
+use revolt_config::config;
 use revolt_database::{Account, Database, MFATicket, UnvalidatedTicket};
 use revolt_models::v0;
-use rocket::serde::json::Json;
+use revolt_result::{Result, create_error};
 use rocket::State;
-
+use rocket::serde::json::Json;
 
 /// # Create MFA ticket
 ///
@@ -18,6 +18,8 @@ pub async fn create_ticket(
     existing_ticket: Option<UnvalidatedTicket>,
     data: Json<v0::MFAResponse>,
 ) -> Result<Json<v0::MFATicket>> {
+    let session_authenticated = account.is_some();
+
     // Find the relevant account
     let mut account = match (account, existing_ticket) {
         (Some(_), Some(_)) => return Err(create_error!(OperationFailed)),
@@ -29,10 +31,14 @@ pub async fn create_ticket(
         _ => return Err(create_error!(InvalidToken)),
     };
 
-    // Validate the MFA response
-    account
-        .consume_mfa_response(db, data.into_inner(), None)
-        .await?;
+    // In OIDC-only mode the authenticated session is the reauthentication
+    // proof; keep TOTP/recovery checks when the account has TOTP enabled.
+    let settings = config().await;
+    if !settings.api.oidc.is_enabled() || account.mfa.is_active() || !session_authenticated {
+        account
+            .consume_mfa_response(db, data.into_inner(), None)
+            .await?;
+    }
 
     // Create a new ticket for this account
     let ticket = MFATicket::new(account.id, true);
@@ -44,16 +50,17 @@ pub async fn create_ticket(
 mod tests {
     use crate::{rocket, util::test::TestHarness};
     use revolt_database::Totp;
-    use rocket::http::{Header, Status};
     use revolt_models::v0;
     use revolt_result::{Error, ErrorType};
+    use rocket::http::{Header, Status};
 
     #[rocket::async_test]
     async fn success() {
         let harness = TestHarness::new().await;
         let (_, session, _) = harness.new_user().await;
 
-        let res = harness.client
+        let res = harness
+            .client
             .put("/auth/mfa/ticket")
             .header(Header::new("X-Session-Token", session.token.clone()))
             .body(
@@ -79,7 +86,8 @@ mod tests {
         };
         account.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .put("/auth/mfa/ticket")
             .header(Header::new("X-Session-Token", session.token.clone()))
             .body(
@@ -107,7 +115,8 @@ mod tests {
         };
         account.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .put("/auth/mfa/ticket")
             .header(Header::new("X-Session-Token", session.token.clone()))
             .body(
@@ -136,7 +145,8 @@ mod tests {
         };
         account.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .put("/auth/mfa/ticket")
             .header(Header::new("X-Session-Token", session.token.clone()))
             .body(

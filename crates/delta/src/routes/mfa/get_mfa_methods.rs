@@ -1,5 +1,6 @@
 //! Fetch available MFA methods.
 //! GET /mfa/methods
+use revolt_config::config;
 use revolt_database::Account;
 use revolt_models::v0;
 use rocket::serde::json::Json;
@@ -10,6 +11,10 @@ use rocket::serde::json::Json;
 #[openapi(tag = "MFA")]
 #[get("/methods")]
 pub async fn get_mfa_methods(account: Account) -> Json<Vec<v0::MFAMethod>> {
+    let settings = config().await;
+    if settings.api.oidc.is_enabled() && !account.mfa.is_active() {
+        return Json(vec![]);
+    }
     Json(
         account
             .mfa
@@ -24,15 +29,16 @@ pub async fn get_mfa_methods(account: Account) -> Json<Vec<v0::MFAMethod>> {
 mod tests {
     use crate::{rocket, util::test::TestHarness};
     use revolt_database::Totp;
-    use rocket::http::{Header, Status};
     use revolt_models::v0;
+    use rocket::http::{Header, Status};
 
     #[rocket::async_test]
     async fn success() {
         let harness = TestHarness::new().await;
         let (_, session, _) = harness.new_user().await;
 
-        let res = harness.client
+        let res = harness
+            .client
             .get("/auth/mfa/methods")
             .header(Header::new("X-Session-Token", session.token))
             .dispatch()
@@ -56,7 +62,8 @@ mod tests {
         account.mfa.generate_recovery_codes();
         account.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .get("/auth/mfa/methods")
             .header(Header::new("X-Session-Token", session.token))
             .dispatch()

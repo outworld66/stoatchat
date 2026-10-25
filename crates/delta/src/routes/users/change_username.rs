@@ -1,9 +1,10 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
-use revolt_database::{Database, User, Account};
+use revolt_config::config;
+use revolt_database::{Account, Database, User};
 use revolt_models::v0;
-use revolt_result::{create_error, Result};
-use rocket::{serde::json::Json, State};
+use revolt_result::{Result, create_error};
+use rocket::{State, serde::json::Json};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -19,8 +20,7 @@ pub struct DataChangeUsername {
     /// New username
     #[validate(length(min = 2, max = 32), regex = "RE_USERNAME")]
     username: String,
-    /// Current account password
-    #[validate(length(min = 8, max = 1024))]
+    /// Current account password, required when OIDC is disabled
     password: String,
 }
 
@@ -42,9 +42,15 @@ pub async fn change_username(
         })
     })?;
 
-    account
-        .verify_password(&data.password)
-        .map_err(|_| create_error!(InvalidCredentials))?;
+    let settings = config().await;
+    if !settings.api.oidc.is_enabled() || account.mfa.is_active() {
+        if data.password.len() < 8 || data.password.len() > 1024 {
+            return Err(create_error!(InvalidCredentials));
+        }
+        account
+            .verify_password(&data.password)
+            .map_err(|_| create_error!(InvalidCredentials))?;
+    }
 
     user.update_username(db, data.username).await?;
     Ok(Json(user.into(db, None).await))

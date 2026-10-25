@@ -1,12 +1,13 @@
 //! Change account email.
 //! PATCH /account/change/email
+use revolt_config::config;
 use revolt_database::util::email::validate_email;
 use revolt_database::{Account, Database, ValidatedTicket};
 use revolt_models::v0;
-use rocket::serde::json::Json;
-use rocket::State;
-use rocket_empty::EmptyResponse;
 use revolt_result::{Result, create_error};
+use rocket::State;
+use rocket::serde::json::Json;
+use rocket_empty::EmptyResponse;
 
 /// # Change Email
 ///
@@ -20,6 +21,12 @@ pub async fn change_email(
     data: Json<v0::DataChangeEmail>,
 ) -> Result<EmptyResponse> {
     let data = data.into_inner();
+
+    if config().await.api.oidc.is_enabled() {
+        return Err(create_error!(FeatureDisabled {
+            feature: "email changes; update the email in your identity provider".into()
+        }));
+    }
 
     validate_email(&data.email)?;
 
@@ -52,7 +59,8 @@ mod tests {
         let harness = TestHarness::new().await;
         let (account, session, _) = harness.new_user().await;
 
-        let res = harness.client
+        let res = harness
+            .client
             .patch("/auth/account/change/email")
             .header(ContentType::JSON)
             .header(Header::new("X-Session-Token", session.token.clone()))
@@ -78,7 +86,8 @@ mod tests {
         let harness = TestHarness::new().await;
         let (account, session, _) = harness.new_user().await;
 
-        let res = harness.client
+        let res = harness
+            .client
             .patch("/auth/account/change/email")
             .header(ContentType::JSON)
             .header(Header::new("X-Session-Token", session.token.clone()))
@@ -97,7 +106,8 @@ mod tests {
         let account = harness.db.fetch_account(&account.id).await.unwrap();
 
         let (_, code) = harness.assert_email("change_email@smtp.test").await;
-        let res = harness.client
+        let res = harness
+            .client
             .post(format!("/auth/account/verify/{}", code))
             .dispatch()
             .await;
@@ -132,7 +142,8 @@ mod tests {
         let ticket = MFATicket::new(account.id.to_string(), true);
         ticket.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .patch("/auth/account/change/email")
             .header(ContentType::JSON)
             .header(Header::new("X-Session-Token", session.token.clone()))
@@ -168,7 +179,8 @@ mod tests {
         account.mfa.totp_token = totp.clone();
         account.save(&harness.db).await.unwrap();
 
-        let res = harness.client
+        let res = harness
+            .client
             .patch("/auth/account/change/email")
             .header(ContentType::JSON)
             .header(Header::new("X-Session-Token", session.token.clone()))

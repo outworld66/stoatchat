@@ -272,6 +272,30 @@ pub struct ApiOidc {
     pub client_secret: String,
 }
 
+impl ApiOidc {
+    pub fn is_enabled(&self) -> bool {
+        !self.issuer.is_empty() && !self.client_id.is_empty() && !self.client_secret.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod oidc_tests {
+    use super::ApiOidc;
+
+    #[test]
+    fn is_enabled_requires_all_credentials() {
+        let mut oidc = ApiOidc::default();
+        assert!(!oidc.is_enabled());
+
+        oidc.issuer = "https://identity.example".into();
+        oidc.client_id = "stoat".into();
+        assert!(!oidc.is_enabled());
+
+        oidc.client_secret = "x".into();
+        assert!(oidc.is_enabled());
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct ApiAuditLogs {
     /// How long audit log entries last before being removed, in seconds

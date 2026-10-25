@@ -2,22 +2,22 @@
 //! POST /account/create
 use std::time::Duration;
 
-use tokio::time::sleep;
 use revolt_config::config;
 use revolt_database::{
+    Account, Database,
     util::{
         captcha::check_captcha,
         email::validate_email,
         password::assert_safe,
-        shield::{validate_shield, ShieldValidationInput},
+        shield::{ShieldValidationInput, validate_shield},
     },
-    Account, Database,
 };
 use revolt_models::v0;
-use revolt_result::{create_error, Result};
-use rocket::serde::json::Json;
+use revolt_result::{Result, create_error};
 use rocket::State;
+use rocket::serde::json::Json;
 use rocket_empty::EmptyResponse;
+use tokio::time::sleep;
 
 /// # Create Account
 ///
@@ -32,17 +32,17 @@ pub async fn create_account(
     let data = data.into_inner();
 
     let settings = config().await;
-    if !settings.api.oidc.issuer.is_empty()
-        && !settings.api.oidc.client_id.is_empty()
-        && !settings.api.oidc.client_secret.is_empty()
-    {
+    if settings.api.oidc.is_enabled() {
         return Err(create_error!(FeatureDisabled {
             feature: "password registration".into()
         }));
     }
 
     // Random jitter from 0-1000ms
-    sleep(Duration::from_millis((rand::random::<f32>() * 1000.) as u64)).await;
+    sleep(Duration::from_millis(
+        (rand::random::<f32>() * 1000.) as u64,
+    ))
+    .await;
 
     // Check Captcha token
     check_captcha(data.captcha.as_deref()).await?;
@@ -84,12 +84,12 @@ pub async fn create_account(
 
 #[cfg(test)]
 mod tests {
+    use crate::util::test::PubSubTestHelper;
     use crate::{rocket, util::test::TestHarness};
     use revolt_config::overwrite_config;
-    use revolt_database::{events::client::EventV1, AccountInvite};
+    use revolt_database::{AccountInvite, events::client::EventV1};
     use revolt_result::{Error, ErrorType};
     use rocket::http::{ContentType, Status};
-    use crate::util::test::PubSubTestHelper;
 
     #[rocket::async_test]
     async fn success() {
@@ -117,7 +117,8 @@ mod tests {
             .wait_for_event(|event| match event {
                 EventV1::CreateAccount { account } => account.email == "success@validemail.com",
                 _ => false,
-            }).await;
+            })
+            .await;
     }
 
     #[rocket::async_test]

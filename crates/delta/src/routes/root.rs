@@ -194,9 +194,7 @@ pub async fn root() -> Result<Json<RevoltConfig>> {
             },
             email: !config.api.smtp.host.is_empty(),
             invite_only: config.api.registration.invite_only,
-            oidc: !config.api.oidc.issuer.is_empty()
-                && !config.api.oidc.client_id.is_empty()
-                && !config.api.oidc.client_secret.is_empty(),
+            oidc: config.api.oidc.is_enabled(),
             autumn: Feature {
                 enabled: !config.hosts.autumn.is_empty(),
                 url: config.hosts.autumn.clone(),
@@ -243,7 +241,8 @@ pub async fn root() -> Result<Json<RevoltConfig>> {
                         .global
                         .restrict_server_creation,
                     new_user_hours: config.features.limits.global.new_user_hours as i64,
-                    max_invite_duration_days: config.features.limits.global.max_invite_duration_days as i64,
+                    max_invite_duration_days: config.features.limits.global.max_invite_duration_days
+                        as i64,
                 },
                 new_user: UserLimits::from_feature_limits(config.features.limits.new_user),
                 default: UserLimits::from_feature_limits(config.features.limits.default),

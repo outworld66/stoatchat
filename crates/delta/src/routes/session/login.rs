@@ -5,13 +5,13 @@ use std::time::Duration;
 use iso8601_timestamp::Timestamp;
 use revolt_config::config;
 use revolt_database::{
-    util::{email::normalise_email, password::assert_safe},
     Database, EmailVerification, MFATicket,
+    util::{email::normalise_email, password::assert_safe},
 };
 use revolt_models::v0;
-use revolt_result::{create_error, Result};
-use rocket::serde::json::Json;
+use revolt_result::{Result, create_error};
 use rocket::State;
+use rocket::serde::json::Json;
 use tokio::time::sleep;
 
 /// # Login
@@ -36,10 +36,7 @@ pub async fn login(
             friendly_name,
         } => {
             let settings = config().await;
-            if !settings.api.oidc.issuer.is_empty()
-                && !settings.api.oidc.client_id.is_empty()
-                && !settings.api.oidc.client_secret.is_empty()
-            {
+            if settings.api.oidc.is_enabled() {
                 return Err(create_error!(FeatureDisabled {
                     feature: "password authentication".into()
                 }));
@@ -170,14 +167,14 @@ pub async fn login(
 
 #[cfg(test)]
 mod tests {
+    use crate::util::test::PubSubTestHelper;
     use crate::{rocket, util::test::TestHarness};
     use iso8601_timestamp::Timestamp;
     use revolt_database::{
-        events::client::EventV1, Account, EmailVerification, Lockout, MFATicket, Totp,
+        Account, EmailVerification, Lockout, MFATicket, Totp, events::client::EventV1,
     };
     use revolt_models::v0;
     use revolt_result::{Error, ErrorType};
-    use crate::util::test::PubSubTestHelper;
     use rocket::http::{ContentType, Status};
 
     #[rocket::async_test]
@@ -212,10 +209,12 @@ mod tests {
         assert_eq!(res.status(), Status::Ok);
         assert!(res.into_json::<v0::Session>().await.is_some());
 
-        let event = pubsub.wait_for_event(|event| match event {
-            EventV1::CreateSession { session } => session.user_id == account.id,
-            _ => false,
-        }).await;
+        let event = pubsub
+            .wait_for_event(|event| match event {
+                EventV1::CreateSession { session } => session.user_id == account.id,
+                _ => false,
+            })
+            .await;
         if !matches!(event, EventV1::CreateSession { .. }) {
             panic!("Received incorrect event type. {:?}", event);
         }
