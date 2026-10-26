@@ -1,13 +1,14 @@
 //! Change account password.
 //! PATCH /account/change/password
+use revolt_config::config;
 use revolt_database::{
-    util::password::{assert_safe, hash_password},
     Account, Database, ValidatedTicket,
+    util::password::{assert_safe, hash_password},
 };
 use revolt_models::v0;
-use revolt_result::{create_error, Result};
-use rocket::serde::json::Json;
+use revolt_result::{Result, create_error};
 use rocket::State;
+use rocket::serde::json::Json;
 use rocket_empty::EmptyResponse;
 
 /// # Change Password
@@ -22,6 +23,12 @@ pub async fn change_password(
     data: Json<v0::DataChangePassword>,
 ) -> Result<EmptyResponse> {
     let data = data.into_inner();
+
+    if config().await.api.oidc.is_enabled() {
+        return Err(create_error!(FeatureDisabled {
+            feature: "password changes; use your identity provider".into()
+        }));
+    }
 
     if account.mfa.is_active() && validated_ticket.is_none() {
         return Err(create_error!(InvalidCredentials));
@@ -43,8 +50,38 @@ pub async fn change_password(
 #[cfg(test)]
 mod tests {
     use crate::{rocket, util::test::TestHarness};
+    use revolt_config::overwrite_config;
     use revolt_database::{MFATicket, Totp};
     use rocket::http::{ContentType, Header, Status};
+
+    #[rocket::async_test]
+    async fn fail_when_oidc_is_enabled() {
+        overwrite_config(|config| {
+            config.api.oidc.issuer = "https://identity.example".into();
+            config.api.oidc.client_id = "stoat".into();
+            config.api.oidc.client_secret = "secret".into();
+        })
+        .await;
+
+        let harness = TestHarness::new().await;
+        let (_, session, _) = harness.new_user().await;
+        let res = harness
+            .client
+            .patch("/auth/account/change/password")
+            .header(ContentType::JSON)
+            .header(Header::new("X-Session-Token", session.token))
+            .body(
+                json!({
+                    "password": "x",
+                    "current_password": "x"
+                })
+                .to_string(),
+            )
+            .dispatch()
+            .await;
+
+        assert_eq!(res.status(), Status::BadRequest);
+    }
 
     #[rocket::async_test]
     async fn success() {

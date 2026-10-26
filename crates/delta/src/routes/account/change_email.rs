@@ -53,6 +53,35 @@ mod tests {
     use rocket::http::{ContentType, Header, Status};
 
     #[rocket::async_test]
+    async fn fail_when_oidc_is_enabled() {
+        overwrite_config(|config| {
+            config.api.oidc.issuer = "https://identity.example".into();
+            config.api.oidc.client_id = "stoat".into();
+            config.api.oidc.client_secret = "secret".into();
+        })
+        .await;
+
+        let harness = TestHarness::new().await;
+        let (_, session, _) = harness.new_user().await;
+        let res = harness
+            .client
+            .patch("/auth/account/change/email")
+            .header(ContentType::JSON)
+            .header(Header::new("X-Session-Token", session.token))
+            .body(
+                json!({
+                    "email": "new@example.test",
+                    "current_password": "x"
+                })
+                .to_string(),
+            )
+            .dispatch()
+            .await;
+
+        assert_eq!(res.status(), Status::BadRequest);
+    }
+
+    #[rocket::async_test]
     async fn success() {
         overwrite_config(|config| config.api.smtp.host = "".to_string()).await;
 
