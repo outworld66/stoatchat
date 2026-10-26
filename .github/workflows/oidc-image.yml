@@ -2,7 +2,7 @@ name: Build OIDC API image
 
 on:
   push:
-    branches: [feature/oidc-login]
+    branches: [feature/oidc-login, fix/oidc-account-settings]
 
 permissions:
   contents: read
